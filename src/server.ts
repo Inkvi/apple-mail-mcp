@@ -113,8 +113,14 @@ server.registerTool(
   },
   async ({ rowids, read, flagged, moveTo, account }) => {
     const done: string[] = [];
-    if (read !== undefined)    done.push(`read=${read} on ${await markRead(rowids, read)} messages`);
-    if (flagged !== undefined) done.push(`flagged=${flagged} on ${await setFlagged(rowids, flagged)} messages`);
+    if (read !== undefined) {
+      done.push(`read=${read} on ${await markRead(rowids, read)} messages`);
+      dispatcher.recordWrite(rowids, { read });
+    }
+    if (flagged !== undefined) {
+      done.push(`flagged=${flagged} on ${await setFlagged(rowids, flagged)} messages`);
+      dispatcher.recordWrite(rowids, { flagged });
+    }
     if (moveTo) {
       if (!account) throw new Error("moveTo requires account");
       done.push(`moved ${await moveMessages(rowids, moveTo, account)} messages to ${moveTo}`);

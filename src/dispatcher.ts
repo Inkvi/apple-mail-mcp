@@ -4,6 +4,7 @@ import { clampLimit, EnvelopeStore } from "./store/envelope";
 import { resolveMessageFile } from "./store/paths";
 import { parseEmlxFile, unwrapEmlx, type ParsedEmail } from "./store/emlx";
 import { BODY_SCAN_CAP } from "./limits";
+import { WriteOverlay, type WritePatch } from "./coherence/overlay";
 import type { MailboxRow, MessageRow, SearchFilter } from "./types";
 
 export { BODY_SCAN_CAP };
@@ -18,9 +19,14 @@ export interface FullMessage extends MessageRow {
 
 export class Dispatcher {
   private store: EnvelopeStore;
+  readonly overlay: WriteOverlay;
 
-  constructor(private storeRoot: string) {
+  // Default TTL sized from docs/measurements/wal-lag.md: measured post-write
+  // lag is 0 to 1 ms and the osascript round trip is about 200 ms, so 2000 ms
+  // covers everything measured roughly tenfold. Re-measure before changing.
+  constructor(private storeRoot: string, overlayTtlMs = 2000) {
     this.store = new EnvelopeStore(storeRoot);
+    this.overlay = new WriteOverlay(overlayTtlMs);
   }
 
   listMailboxes(): MailboxRow[] {
@@ -29,7 +35,9 @@ export class Dispatcher {
 
   /** Metadata-only search. Runs entirely in SQLite, near instant. */
   searchMessages(f: SearchFilter): MessageRow[] {
-    return this.store.searchMessages(f);
+    const rows = this.store.searchMessages(f);
+    this.overlay.reconcile(rows);
+    return this.overlay.applyAll(rows);
   }
 
   /**
@@ -68,22 +76,25 @@ export class Dispatcher {
         continue;
       }
     }
-    return matched;
+    this.overlay.reconcile(matched);
+    return this.overlay.applyAll(matched);
   }
 
   async getMessage(rowid: number): Promise<FullMessage | null> {
     const row = this.store.getMessage(rowid);
     if (!row) return null;
+    this.overlay.reconcile([row]);
+    const patched = this.overlay.apply(row);
 
     const file = resolveMessageFile(this.storeRoot, row.mailboxUrl, rowid);
     if (!file) {
-      return { ...row, bodyAvailable: false, partial: false, text: null, html: null, attachments: [] };
+      return { ...patched, bodyAvailable: false, partial: false, text: null, html: null, attachments: [] };
     }
 
     try {
       const parsed = await parseEmlxFile(file.path);
       return {
-        ...row,
+        ...patched,
         bodyAvailable: true,
         partial: file.partial,
         text: parsed.text,
@@ -91,13 +102,20 @@ export class Dispatcher {
         attachments: parsed.attachments,
       };
     } catch {
-      return { ...row, bodyAvailable: false, partial: file.partial, text: null, html: null, attachments: [] };
+      return { ...patched, bodyAvailable: false, partial: file.partial, text: null, html: null, attachments: [] };
     }
   }
 
   getThread(rowid: number): MessageRow[] {
     const row = this.store.getMessage(rowid);
-    return row ? this.store.getThread(row.conversationId) : [];
+    if (!row) return [];
+    const rows = this.store.getThread(row.conversationId);
+    this.overlay.reconcile(rows);
+    return this.overlay.applyAll(rows);
+  }
+
+  recordWrite(rowids: number[], patch: WritePatch): void {
+    for (const id of rowids) this.overlay.record(id, patch);
   }
 
   async getAttachment(rowid: number, filename: string): Promise<{ filename: string; contentType: string; base64: string } | null> {
