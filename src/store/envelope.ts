@@ -59,6 +59,13 @@ export function clampLimit(limit: number | undefined, max = 1000): number {
   return Math.max(1, Math.min(max, Math.floor(limit)));
 }
 
+/**
+ * Ceiling for internal callers that need a candidate pool larger than the
+ * MCP-facing cap of 1000. Must stay at least BODY_SCAN_CAP + 1 from the
+ * dispatcher, or body scan overflow detection breaks.
+ */
+export const INTERNAL_LIMIT_MAX = 5001;
+
 export class EnvelopeStore {
   private db: Database;
 
@@ -90,11 +97,11 @@ export class EnvelopeStore {
   }
 
   /**
-   * limitOverride is for trusted internal callers only, such as the
-   * dispatcher's body scan, which needs a candidate pool larger than the
-   * MCP-facing cap of 1000. MCP tool input must never reach it.
+   * internalLimit raises the ceiling for internal callers such as the
+   * dispatcher's body scan. It is clamped too, to INTERNAL_LIMIT_MAX, so no
+   * caller can produce an unbounded query or a non-integer binding.
    */
-  searchMessages(f: SearchFilter, limitOverride?: number): MessageRow[] {
+  searchMessages(f: SearchFilter, internalLimit?: number): MessageRow[] {
     const where: string[] = ["m.deleted = 0"];
     const params: Record<string, string | number> = {};
 
@@ -107,7 +114,9 @@ export class EnvelopeStore {
     if (f.flaggedOnly)    { where.push("m.flagged = 1"); }
     if (f.hasAttachments) { where.push("exists (select 1 from attachments at2 where at2.message = m.ROWID)"); }
 
-    params.$limit = limitOverride ?? clampLimit(f.limit);
+    params.$limit = internalLimit !== undefined
+      ? clampLimit(internalLimit, INTERNAL_LIMIT_MAX)
+      : clampLimit(f.limit);
 
     const sql = `${SELECT} where ${where.join(" and ")} order by m.date_received desc limit $limit`;
     return (this.db.query(sql).all(params) as RawRow[]).map(toMessageRow);

@@ -37,13 +37,14 @@ export class Dispatcher {
   }
 
   /**
-   * Narrow in SQLite first, then read only the surviving files. The caller's
-   * limit bounds the candidate pool; when the pool would exceed BODY_SCAN_CAP
-   * the scan refuses rather than reading tens of thousands of files.
+   * Narrow in SQLite first, then read only the surviving files. The candidate
+   * pool is bounded by BODY_SCAN_CAP alone, never by the caller's limit, so a
+   * body search covers every metadata match or refuses. The caller's limit
+   * only caps how many matches come back. Fetching one row past the cap makes
+   * overflow detectable.
    */
   async searchMessagesWithBody(f: SearchFilter & { body: string }): Promise<MessageRow[]> {
-    const candidateLimit = clampLimit(f.limit, BODY_SCAN_CAP + 1);
-    const candidates = this.store.searchMessages(f, candidateLimit);
+    const candidates = this.store.searchMessages(f, BODY_SCAN_CAP + 1);
 
     if (candidates.length > BODY_SCAN_CAP) {
       throw new Error(
@@ -52,6 +53,7 @@ export class Dispatcher {
       );
     }
 
+    const maxResults = clampLimit(f.limit);
     const needle = f.body.toLowerCase();
     const matched: MessageRow[] = [];
     for (const row of candidates) {
@@ -60,7 +62,12 @@ export class Dispatcher {
       try {
         const parsed = await parseEmlxFile(file.path);
         const hay = `${parsed.text ?? ""}\n${parsed.html ?? ""}`.toLowerCase();
-        if (hay.includes(needle)) matched.push(row);
+        if (hay.includes(needle)) {
+          matched.push(row);
+          // Candidates are newest first, so stopping at the limit returns the
+          // same rows as scanning everything and slicing.
+          if (matched.length >= maxResults) break;
+        }
       } catch {
         continue;
       }

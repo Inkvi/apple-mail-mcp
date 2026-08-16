@@ -95,6 +95,17 @@ d("EnvelopeStore against the real store", () => {
     expect(again?.rowid).toBe(first.rowid);
   });
 
+  test("the internal limit path is clamped too", () => {
+    // Unclamped, -5 binds as LIMIT -5 which SQLite treats as unbounded, and
+    // NaN raises a datatype mismatch. Both must clamp to a positive integer.
+    const neg = store.searchMessages({}, -5);
+    expect(neg.length).toBe(1);
+
+    const nan = store.searchMessages({}, NaN);
+    expect(nan.length).toBeGreaterThan(0);
+    expect(nan.length).toBeLessThanOrEqual(50);
+  });
+
   test("metadata search stays under 100ms", () => {
     const t = performance.now();
     store.searchMessages({ limit: 200 });
