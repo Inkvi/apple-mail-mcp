@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { Dispatcher } from "./dispatcher";
-import { markRead, setFlagged, moveMessages, deleteMessages } from "./mail/mutations";
+import { markRead, setFlagged, moveMessages, deleteMessages, createDraft } from "./mail/mutations";
 import { findStoreRoot } from "./store/paths";
 import { probeStore } from "./store/probe";
 
@@ -139,6 +139,40 @@ server.registerTool(
   async ({ rowids }) => ({
     content: [{ type: "text", text: `Moved ${await deleteMessages(rowids)} messages to Trash.` }],
   }),
+);
+
+server.registerTool(
+  "create_draft",
+  {
+    description:
+      "Create a draft email in Apple Mail. The draft is saved to Drafts and opened for review. " +
+      "This server cannot send mail; the human presses send. " +
+      "Pass replyToRowid to quote and address an existing message.",
+    inputSchema: {
+      to: z.array(z.string()).min(1).describe("Recipient email addresses"),
+      cc: z.array(z.string()).optional(),
+      subject: z.string(),
+      body: z.string(),
+      replyToRowid: z.number().optional().describe("Message id being replied to, from search_messages"),
+    },
+  },
+  async ({ to, cc, subject, body, replyToRowid }) => {
+    let finalSubject = subject;
+    let finalBody = body;
+
+    if (replyToRowid !== undefined) {
+      const original = await dispatcher.getMessage(replyToRowid);
+      if (!original) throw new Error(`Message ${replyToRowid} not found.`);
+      if (!/^re:/i.test(finalSubject) && original.subject) {
+        finalSubject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
+      }
+      const quoted = (original.text ?? "").split("\n").map((l) => `> ${l}`).join("\n");
+      finalBody = `${body}\n\nOn ${new Date(original.dateReceived * 1000).toLocaleString()}, ${original.sender ?? "someone"} wrote:\n${quoted}`;
+    }
+
+    await createDraft({ to, cc, subject: finalSubject, body: finalBody });
+    return { content: [{ type: "text", text: `Draft saved to Drafts and opened in Mail. Review it and send it yourself.` }] };
+  },
 );
 
 await server.connect(new StdioServerTransport());

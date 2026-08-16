@@ -76,3 +76,43 @@ export const setFlagged = (rowids: number[], flagged: boolean) => count(buildFla
 export const moveMessages = (rowids: number[], targetMailbox: string, account: string) =>
   count(buildMoveScript(rowids, targetMailbox, account));
 export const deleteMessages = (rowids: number[]) => count(buildDeleteScript(rowids));
+
+export interface DraftSpec {
+  to: string[];
+  cc?: string[];
+  subject: string;
+  body: string;
+}
+
+/**
+ * Creates a draft and leaves it visible in Mail. There is no send path here
+ * by design: the human presses send.
+ *
+ * Body newlines are preserved by joining AppleScript string literals with
+ * `return`, since escapeAppleScript flattens newlines for safety.
+ */
+export function buildDraftScript(d: DraftSpec): string {
+  if (d.to.length === 0) throw new Error("a draft needs at least one recipient");
+
+  const bodyLiteral = d.body
+    .split(/\r\n|\r|\n/)
+    .map((line) => `"${escapeAppleScript(line)}"`)
+    .join(" & return & ");
+
+  const recipients = [
+    ...d.to.map((a) => `make new to recipient at end of to recipients with properties {address:"${escapeAppleScript(a)}"}`),
+    ...(d.cc ?? []).map((a) => `make new cc recipient at end of cc recipients with properties {address:"${escapeAppleScript(a)}"}`),
+  ].join("\n        ");
+
+  return `
+    tell application "Mail"
+      set newMessage to make new outgoing message with properties {subject:"${escapeAppleScript(d.subject)}", content:${bodyLiteral}, visible:true}
+      tell newMessage
+        ${recipients}
+      end tell
+      save newMessage
+      return "draft created"
+    end tell`;
+}
+
+export const createDraft = (d: DraftSpec) => runAppleScript(buildDraftScript(d));
