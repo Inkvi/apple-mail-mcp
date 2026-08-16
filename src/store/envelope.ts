@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
+import { INTERNAL_LIMIT_MAX } from "../limits";
 import type { MailboxRow, MessageRow, SearchFilter } from "../types";
 
 const SELECT = `
@@ -58,13 +59,6 @@ export function clampLimit(limit: number | undefined, max = 1000): number {
   if (limit === undefined || !Number.isFinite(limit)) return 50;
   return Math.max(1, Math.min(max, Math.floor(limit)));
 }
-
-/**
- * Ceiling for internal callers that need a candidate pool larger than the
- * MCP-facing cap of 1000. Must stay at least BODY_SCAN_CAP + 1 from the
- * dispatcher, or body scan overflow detection breaks.
- */
-export const INTERNAL_LIMIT_MAX = 5001;
 
 export class EnvelopeStore {
   private db: Database;

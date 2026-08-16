@@ -3,14 +3,10 @@ import { simpleParser } from "mailparser";
 import { clampLimit, EnvelopeStore } from "./store/envelope";
 import { resolveMessageFile } from "./store/paths";
 import { parseEmlxFile, unwrapEmlx, type ParsedEmail } from "./store/emlx";
+import { BODY_SCAN_CAP } from "./limits";
 import type { MailboxRow, MessageRow, SearchFilter } from "./types";
 
-/**
- * Above this many candidates a body scan refuses rather than reading tens of
- * thousands of files. Scanning the whole store takes 60 to 90 seconds, and a
- * silent scan or a silent truncation are both worse than an honest refusal.
- */
-export const BODY_SCAN_CAP = 5000;
+export { BODY_SCAN_CAP };
 
 export interface FullMessage extends MessageRow {
   bodyAvailable: boolean;
