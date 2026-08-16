@@ -1,6 +1,7 @@
 import { test, expect, describe } from "bun:test";
-import { shardFor, mailboxDir, findStoreRoot } from "../src/store/paths";
-import { readdirSync, statSync } from "node:fs";
+import { shardFor, mailboxDir, findStoreRoot, resolveMessageFile } from "../src/store/paths";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("shardFor", () => {
@@ -30,6 +31,28 @@ describe("mailboxDir", () => {
   test("handles a single top level mailbox", () => {
     const d = mailboxDir("/root", "imap://ABC-123/INBOX");
     expect(d).toBe("/root/ABC-123/INBOX.mbox");
+  });
+});
+
+describe("resolveMessageFile uuid caching", () => {
+  // The server is long-running. A mailbox whose uuid directory does not
+  // exist yet (new mailbox, account just enabled) must be found on a later
+  // lookup once it appears, so a failed lookup must never be cached.
+  test("a mailbox that appears after a failed lookup is found on retry", () => {
+    const root = mkdtempSync(join(tmpdir(), "mail-paths-"));
+    try {
+      const url = "imap://TEST-ACCT/INBOX";
+      expect(resolveMessageFile(root, url, 42)).toBeNull();
+
+      const messages = join(root, "TEST-ACCT", "INBOX.mbox", "12345678-ABCD-4000-8000-000000000000", "Data", "Messages");
+      mkdirSync(messages, { recursive: true });
+      const emlx = join(messages, "42.emlx");
+      writeFileSync(emlx, "6\nx: y\n\n");
+
+      expect(resolveMessageFile(root, url, 42)?.path).toBe(emlx);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

@@ -28,16 +28,22 @@ export function mailboxDir(storeRoot: string, mailboxUrl: string): string {
 
 const storeUuidCache = new Map<string, string | null>();
 
-/** The UUID directory between <name>.mbox and Data/. One readdir, then cached. */
+/**
+ * The UUID directory between <name>.mbox and Data/. One readdir, then cached.
+ * Only a hit is cached: the server is long-running, and a mailbox whose uuid
+ * directory does not exist yet (new mailbox, account just enabled) must be
+ * findable on a later lookup without a restart.
+ */
 function storeUuidFor(mboxDir: string): string | null {
-  if (storeUuidCache.has(mboxDir)) return storeUuidCache.get(mboxDir) ?? null;
+  const cached = storeUuidCache.get(mboxDir);
+  if (cached) return cached;
   let found: string | null = null;
   try {
     found = readdirSync(mboxDir).find((e) => /^[0-9A-F]{8}-[0-9A-F]{4}-/i.test(e)) ?? null;
   } catch {
     found = null;
   }
-  storeUuidCache.set(mboxDir, found);
+  if (found) storeUuidCache.set(mboxDir, found);
   return found;
 }
 
