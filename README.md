@@ -163,9 +163,58 @@ messages (416 MB Envelope Index):
 Raw data and methodology are in `docs/measurements/wal-lag.md` and the spec
 under `docs/superpowers/specs/`.
 
+## Known limitation: mailbox names differ between the read and write paths
+
+`list_mailboxes` reads names from the Envelope Index. `update_messages` and
+the move it performs take names from AppleScript. These are not always the
+same string, so a name that came out of `list_mailboxes` may not be a name
+the move accepts.
+
+On a Gmail account the index reports `[Gmail]/All Mail` where AppleScript
+knows the same mailbox as `Вся почта` or `All Mail`, without the prefix, in
+whatever language the account uses. System mailboxes (Trash, Sent, Drafts,
+Junk) are worse: Mail does not expose them as `mailbox "<name>" of account`
+at all, so a move cannot target them by name. User-created folders resolve
+normally, which is what the move path is good for.
+
+Related: on Gmail a label is not a location. After moving a message into a
+label, AppleScript reports it there while the index still attributes it to
+All Mail. Both are telling the truth about different things, but a caller
+that moves a message and then filters by `mailboxUrl` will not find it where
+it expects.
+
 ## Development
 
 ```bash
-bun test          # full suite
+bun test          # full suite, no mail is touched
 bun run typecheck # tsc --noEmit
 ```
+
+### Live write tests
+
+The default suite never executes a mutation. It asserts generated
+AppleScript text, which is not enough: four real defects in the write path
+passed those assertions while every write tool silently did nothing.
+
+The live suite runs the real thing and is off unless you opt in:
+
+```bash
+APPLE_MAIL_LIVE=1 APPLE_MAIL_LIVE_ACCOUNT="you@example.com" bun test live
+```
+
+It takes about five minutes, and it mutates real mail. What it does:
+
+- Creates its own drafts, tagged with a unique marker in the subject. Every
+  message it touches is one it made. It re-checks that marker immediately
+  before each mutation, so a bug in the test mutates nothing rather than
+  something of yours.
+- Creates a scratch mailbox named `MCP-Live-Test` on the account you name.
+  On IMAP that is a real server-side folder, visible in the web UI.
+- Verifies each change twice, in SQLite and by asking Mail, so a pass is
+  never the store agreeing with itself.
+- Deletes its messages afterwards, which leaves them in Trash, because that
+  is what `delete_messages` does.
+
+Two things it may leave behind: the messages in Trash, and the scratch
+mailbox. Mail refuses to delete a Gmail folder over AppleScript with error
+-10000 even when the folder is empty, so remove it by hand if you mind.

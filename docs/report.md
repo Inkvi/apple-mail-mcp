@@ -116,24 +116,56 @@ format change, or missing Full Disk Access), the server still starts. Read
 tools return an error naming the problem; write tools keep working, because
 they route through Mail.app and do not touch the store.
 
-## Testing, and its honest limit
+## Testing
 
-95 tests, 200 assertions, 11 files, clean `tsc --noEmit`. Fixtures are
+97 offline tests plus an 8-test live suite, clean `tsc --noEmit`. Fixtures are
 synthetic. A runtime test reads 200 real messages from the live store and
 commits nothing from them.
 
-**The write path is never executed by any test.** The mutation tests assert
-generated AppleScript *text*, not its effect. That is a real gap, and it is
-the exact class of bug already caught once by hand: `set deleted status` turns
-out to fail with error -609 on a freshly created draft, where plain `delete`
-works. Text assertions would not have caught that. Closing the gap needs a
-scratch mailbox and repeated live mutations against real mail.
+The live suite (`test/live.test.ts`, off unless `APPLE_MAIL_LIVE=1`) executes
+real mutations against real Mail. Every message it touches is one it created,
+tagged with a unique marker it re-checks immediately before each mutation, so
+a bug in the test mutates nothing rather than something real. Each change is
+verified twice, in SQLite and by asking Mail, so a pass is never the store
+agreeing with itself.
 
-Two smaller notes from the same review pass: several tests initially could
-pass vacuously, because `Array.every()` returns true on an empty array, and
+Two smaller notes from the review pass: several tests initially could pass
+vacuously, because `Array.every()` returns true on an empty array, and
 non-vacuity guards were added; and iCloud proved unreachable via AppleScript
 on this machine, so the parity test skips unreachable accounts rather than
 failing on them.
+
+## What the live tests found
+
+Writing them was not a formality. **Every write tool was a silent no-op**, and
+the entire offline suite passed the whole time.
+
+1. **`whose id is in {1, 2}` matches nothing.** Mail accepts the syntax
+   without error and returns zero messages. This predicate was shared by
+   flag, read, move, and delete, so all four did nothing and reported zero
+   touched. Fixed with an `or` chain: `id is 1 or id is 2`.
+2. **Collecting message references, then mutating them, fails with -1728.**
+   A collected reference is a positional specifier that Mail re-resolves on
+   use, and any mailbox change in between invalidates it. Fixed by mutating
+   inside the loop that finds the message.
+3. **Walking hits forwards while deleting fails with -10000.** The mutation
+   renumbers the collection under the loop. Fixed by walking backwards.
+4. **`set deleted status of m to true` fails with -609 on Gmail**, for
+   ordinary messages as well as drafts. The -609 error was already known for
+   drafts; it turned out not to be draft-specific at all. `delete` is the
+   only verb that works for both, and it still moves to Trash rather than
+   erasing, which was verified.
+
+The offline suite passed before and after every one of these fixes, including
+when the predicate changed from `is in` to an `or` chain. That is the
+strongest available argument that asserting on generated script text proves
+nothing about whether the script works.
+
+Three further findings are behaviour rather than defects, and are documented
+in the README: mailbox names differ between the read and write paths; Gmail
+labels are not locations, so SQLite and AppleScript disagree about where a
+moved message lives; and a move assigns the message a new ROWID, so a
+caller's id goes stale the moment it succeeds.
 
 ## Defects caught before shipping
 
@@ -155,14 +187,22 @@ diff was reviewed after. Five defects were caught that would have shipped:
 
 ## Open items
 
-1. **Live write tests.** Needs authorization for a scratch mailbox and
-   repeated live mutations. This is the one gap I would close first.
-2. **Heavier mutations are unmeasured.** Write visibility was measured on a
+1. **Only one account type has been exercised live.** The live suite has run
+   against Gmail IMAP. POP, Exchange, and local On My Mac mailboxes are
+   untested, and Gmail was the account that produced every quirk found so
+   far, so the others will have their own.
+2. **A move invalidates the caller's ROWID and the coherence overlay keys on
+   ROWID.** After a successful move the id the caller holds no longer names
+   the message, so any overlay entry recorded against it describes a row that
+   is gone. Nothing observed has gone wrong because of this yet, but the
+   overlay's premise and the move's behaviour do not agree.
+3. **`update_messages` cannot target system mailboxes.** Mail does not expose
+   Trash, Sent, Drafts, or Junk as `mailbox "<name>" of account`, so a move to
+   any of them fails. "Move this to Trash" is a reasonable request the tool
+   cannot serve, though `delete_messages` covers the common case.
+4. **Heavier mutations are unmeasured.** Write visibility was measured on a
    flag toggle against an idle Mail.app. Moves and deletes on a busy Mail may
    commit later. The 2000 ms TTL has room, but the data does not cover them.
-3. **Live write tests remain the blocker for a public release.** Publishing a
-   tool that moves and deletes mail, with no test that has ever executed a
-   mutation, puts the error -609 class of defect in front of strangers.
 
 ## Installation note
 
