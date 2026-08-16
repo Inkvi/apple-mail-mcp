@@ -26,7 +26,7 @@ export function mailboxDir(storeRoot: string, mailboxUrl: string): string {
   return dir;
 }
 
-const storeUuidCache = new Map<string, string | null>();
+const storeUuidCache = new Map<string, string>();
 
 /**
  * The UUID directory between <name>.mbox and Data/. One readdir, then cached.
