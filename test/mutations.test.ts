@@ -10,6 +10,11 @@ describe("script generation", () => {
     expect(s).toContain("true");
   });
 
+  test("mark unread carries false through", () => {
+    const s = buildMarkReadScript([5], false);
+    expect(s).toContain("set read status of m to false");
+  });
+
   test("flag scripts carry the boolean through", () => {
     expect(buildFlagScript([7], true)).toContain("true");
     expect(buildFlagScript([7], false)).toContain("false");
@@ -17,7 +22,15 @@ describe("script generation", () => {
 
   test("delete moves to trash rather than erasing", () => {
     const s = buildDeleteScript([9]);
-    expect(s.toLowerCase()).toContain("trash");
+    expect(s).toContain("set deleted status of m to true");
+    expect(s).not.toMatch(/^\s*delete\b/m);
+  });
+
+  test("move resolves the destination before mutating", () => {
+    const s = buildMoveScript([3], "Archive", "iCloud");
+    expect(s).toContain('set destination to mailbox "Archive" of account "iCloud"');
+    expect(s).toContain("move m to destination");
+    expect(s.indexOf("set destination")).toBeLessThan(s.indexOf("move m to destination"));
   });
 
   test("mailbox and account names are escaped", () => {

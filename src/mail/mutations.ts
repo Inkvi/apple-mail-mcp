@@ -62,7 +62,6 @@ export function buildMoveScript(rowids: number[], targetMailbox: string, account
 export function buildDeleteScript(rowids: number[]): string {
   return `${preamble(rowids)}
       repeat with m in targets
-        -- deleted status true moves the message to its account's Trash
         set deleted status of m to true
       end repeat
       return (count of targets)
