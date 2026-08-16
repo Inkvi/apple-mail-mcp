@@ -157,7 +157,9 @@ export function buildDeleteDraftScript(rowid: number): string {
  * recreate, in one script. Order matters: the guard runs first so a missing
  * draft creates nothing, and the replacement is created and saved before the
  * old draft is deleted, so a failure partway through can never lose the
- * draft. The replacement gets a new id.
+ * draft. The precise trade: a failure between the save and the delete leaves
+ * both drafts, so the worst outcome is a duplicate in Drafts to remove by
+ * hand, never a lost draft. The replacement gets a new id.
  */
 export function buildUpdateDraftScript(rowid: number, d: DraftSpec): string {
   const id = draftRowid(rowid);
