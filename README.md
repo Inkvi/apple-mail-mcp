@@ -14,8 +14,8 @@ millisecond.
 This server does both jobs with the right tool for each:
 
 - **Reads** come from Mail's Envelope Index (SQLite, opened read-only) and
-  from the `.emlx` message files on disk. Metadata queries return in well
-  under a millisecond.
+  from the `.emlx` message files on disk. Metadata queries return in
+  single-digit milliseconds.
 - **Writes** go through Mail.app via AppleScript, so Mail stays the owner of
   its own store. This server never writes to Mail's database or files.
 
@@ -33,8 +33,15 @@ that changes this.
 
 ## Requirements
 
-- macOS with Mail.app set up (the store format probed at startup is Mail V10)
+- macOS with Mail.app set up
 - [Bun](https://bun.sh) 1.3.14 or newer
+
+The store format is probed at startup: V10 is verified, and other `V<n>`
+versions are accepted when their schema matches. If the probe rejects the
+store (a future macOS format change, or missing Full Disk Access), the
+server still starts in a degraded state: read tools return a clear error
+naming the problem, and write tools keep working because they go through
+Mail.app rather than the store.
 
 ## Permissions, stated plainly
 
@@ -97,10 +104,10 @@ Messages are identified by one id everywhere: `rowid`, as returned by
 | Tool | What it does |
 |---|---|
 | `list_mailboxes` | All accounts and mailboxes with message and unread counts |
-| `search_messages` | Search by mailbox, sender, subject, date range, read/flagged state, attachments, and optionally body text |
-| `get_message` | One full message: headers, text body, HTML body, attachment list |
+| `search_messages` | Search by mailbox, sender, recipient, subject, date range, read/flagged state, attachments, and optionally body text |
+| `get_message` | One full message: headers including to and cc, text body, HTML body, attachment list |
 | `get_thread` | Every message in the same conversation, oldest first |
-| `get_attachment` | One attachment's content, base64 encoded |
+| `get_attachment` | One attachment's content, base64 encoded. Attachments over 10 MB are refused with their actual size, never truncated |
 
 ### Write tools (AppleScript through Mail.app)
 
@@ -108,7 +115,7 @@ Messages are identified by one id everywhere: `rowid`, as returned by
 |---|---|
 | `update_messages` | Mark read or unread, flag or unflag, move to another mailbox, in batch |
 | `delete_messages` | Move messages to Trash |
-| `create_draft` | Create a draft, optionally quoting a message being replied to. Saved to Drafts and opened; never sent |
+| `create_draft` | Create a draft: new, a reply quoting the original (`replyToRowid`), or a forward carrying the original's headers and text (`forwardOfRowid`). Saved to Drafts and opened; never sent |
 | `update_draft` | Replace a draft with a new version. Mail forbids editing a saved draft in place, so the old draft moves to Trash and a new one is created with a new id |
 | `delete_draft` | Move a draft to Trash. Only searches the Drafts mailbox |
 
@@ -121,8 +128,8 @@ in this server can permanently destroy or send mail.
 Body text is not in Mail's SQLite index, so a body search first narrows
 candidates by metadata, then reads each surviving `.emlx` file. If the
 metadata filters leave more than 5,000 candidates, the search refuses and
-asks you to add a narrowing filter (`from`, `mailboxUrl`, `subject`, or
-`since`) instead of scanning.
+asks you to add a narrowing filter (`from`, `recipient`, `mailboxUrl`,
+`subject`, or `since`) instead of scanning.
 
 Why refuse rather than try harder: scanning the whole store takes 60 to 90
 seconds, and silently scanning that long or silently truncating the
@@ -138,7 +145,8 @@ Exchange setups) report `bodyAvailable: false` for affected messages.
 Numbers from this repository's own measurements on a real store of 103,273
 messages (416 MB Envelope Index):
 
-- Metadata queries: 0.3 to 0.5 ms warm for a 200-row joined query
+- Metadata queries: 3.6 ms for a 200-row joined query, including opening
+  the connection
 - `rowid` to `.emlx` file path resolution: about 0.14 ms per message
 - Write visibility: after an AppleScript mutation returns (the call itself
   takes roughly 180 to 200 ms), the change is visible in SQLite within 0 to
