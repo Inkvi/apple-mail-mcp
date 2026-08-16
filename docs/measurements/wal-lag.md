@@ -54,13 +54,28 @@ Suggested overlay TTL: 1000ms (4x observed max, sanity-check against a floor)
   180 to 200ms per call), the change is already committed to the WAL and
   visible to readers. Both readers observed every change on their very first
   poll; the 0 to 1ms values are just the cost of that first query.
-- **The long-lived connection never went stale.** A long-lived `bun:sqlite`
-  readonly connection observed every WAL commit made by Mail.app, on the
-  first poll, in all five iterations, exactly like a freshly opened
-  connection. Each query starts a new read transaction, so it picks up the
-  latest WAL snapshot. The feared architectural defect (the server's single
-  long-lived reader silently serving stale rows after Mail writes) does not
-  exist. No difference between the two readers was observed.
+- **The long-lived connection never returned a stale value under this
+  access pattern.** Across the four post-first-read iterations (2 through
+  5), the long-lived `bun:sqlite` readonly connection saw every WAL commit
+  made by Mail.app on its first poll, identical to a freshly opened
+  connection: each completed query picked up the latest committed snapshot.
+  Two scoping caveats travel with this claim:
+  - Iteration 1 did not exercise staleness. A WAL read snapshot is
+    established at first read, not at open, and the long-lived store issued
+    its first-ever query only after the first mutation, so iteration 1
+    could not have observed staleness whether or not it exists. The
+    evidence is the four subsequent windows, one mutation type, idle Mail.
+  - The mechanism depends on queries running to completion. `EnvelopeStore`
+    uses `.get()` and `.all()`, so every query is its own read transaction
+    and releases its snapshot. A future code path leaving an `.iterate()`
+    unexhausted would pin a snapshot and break this. Nor does this cover
+    Mail vacuuming, reindexing, or replacing the database file, where a
+    long-lived handle goes permanently stale regardless of transaction
+    semantics.
+
+  Within that scope this is good news for the server's one-connection read
+  path, and Task 10 can rely on it: no staleness was observed, and no
+  difference between the two readers was observed.
 - Restore verified: `flagged=false, read=false` in both AppleScript and
   SQLite after the run, matching the original state.
 
