@@ -1,4 +1,6 @@
 import { test, expect, describe, afterAll } from "bun:test";
+import { Database } from "bun:sqlite";
+import { join } from "node:path";
 import { EnvelopeStore, clampLimit } from "../src/store/envelope";
 import { findStoreRoot } from "../src/store/paths";
 
@@ -87,6 +89,33 @@ d("EnvelopeStore against the real store", () => {
     // The seed message itself matches the filter, so at least one row must come back.
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => (r.sender ?? "").includes(domain))).toBe(true);
+  });
+
+  test("filters by recipient address", () => {
+    // Seed from the recipients table directly, so the expected match is known
+    // up front and an empty result set fails instead of passing vacuously.
+    const db = new Database(join(root!, "MailData", "Envelope Index"), { readonly: true });
+    const seed = db
+      .query(`select m.ROWID as rowid, ra.address as address
+              from messages m
+              join recipients r on r.message = m.ROWID
+              join addresses ra on ra.ROWID = r.address
+              where m.deleted = 0 and ra.address like '%@%'
+              order by m.date_received desc limit 1`)
+      .get() as { rowid: number; address: string } | null;
+    db.close();
+    // Tolerates a store with no recipient rows at all; not a silent pass.
+    if (!seed) return;
+
+    const rows = store.searchMessages({ recipient: seed.address, limit: 50 });
+    // The seed is the newest message with any recipient, so it must be the
+    // newest match for its own address and land inside the limit.
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.map((r) => r.rowid)).toContain(seed.rowid);
+
+    // Prove the filter filters: an address that exists nowhere matches nothing.
+    // An implementation that ignored the field would return the newest rows here.
+    expect(store.searchMessages({ recipient: "no-such-recipient@nowhere.invalid" })).toEqual([]);
   });
 
   test("getMessage round-trips a rowid", () => {

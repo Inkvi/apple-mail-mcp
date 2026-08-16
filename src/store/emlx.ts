@@ -1,14 +1,22 @@
 import { readFile } from "node:fs/promises";
-import { simpleParser } from "mailparser";
+import { simpleParser, type AddressObject } from "mailparser";
 
 export interface ParsedEmail {
   subject: string | null;
   from: string | null;
   to: string[];
+  cc: string[];
   date: Date | null;
   text: string | null;
   html: string | null;
   attachments: { filename: string | null; contentType: string; size: number }[];
+}
+
+function addressList(field: AddressObject | AddressObject[] | undefined): string[] {
+  if (!field) return [];
+  return (Array.isArray(field) ? field : [field]).flatMap((a) =>
+    a.value.map((v) => v.address ?? "").filter(Boolean),
+  );
 }
 
 /**
@@ -34,16 +42,11 @@ export function unwrapEmlx(raw: Buffer): Buffer {
 export async function parseEmlxFile(path: string): Promise<ParsedEmail> {
   const parsed = await simpleParser(unwrapEmlx(await readFile(path)));
 
-  const to = parsed.to
-    ? (Array.isArray(parsed.to) ? parsed.to : [parsed.to]).flatMap((a) =>
-        a.value.map((v) => v.address ?? "").filter(Boolean),
-      )
-    : [];
-
   return {
     subject: parsed.subject ?? null,
     from: parsed.from?.value[0]?.address ?? null,
-    to,
+    to: addressList(parsed.to),
+    cc: addressList(parsed.cc),
     date: parsed.date ?? null,
     text: parsed.text ?? null,
     html: typeof parsed.html === "string" ? parsed.html : null,

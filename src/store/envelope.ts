@@ -101,6 +101,12 @@ export class EnvelopeStore {
 
     if (f.mailboxUrl)     { where.push("mb.url = $mailboxUrl");            params.$mailboxUrl = f.mailboxUrl; }
     if (f.from)           { where.push("a.address like $from");            params.$from = `%${f.from}%`; }
+    if (f.recipient) {
+      where.push(`exists (select 1 from recipients r
+                          join addresses ra on ra.ROWID = r.address
+                          where r.message = m.ROWID and ra.address like $recipient)`);
+      params.$recipient = `%${f.recipient}%`;
+    }
     if (f.subject)        { where.push("s.subject like $subject");         params.$subject = `%${f.subject}%`; }
     if (f.since  !== undefined) { where.push("m.date_received >= $since"); params.$since = f.since; }
     if (f.until  !== undefined) { where.push("m.date_received <= $until"); params.$until = f.until; }

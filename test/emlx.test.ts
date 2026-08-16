@@ -31,6 +31,7 @@ describe("parseEmlxFile against synthetic fixtures", () => {
     expect(m.subject).toBe("Quarterly plan");
     expect(m.from).toBe("alice@example.com");
     expect(m.to).toEqual(["bob@example.com"]);
+    expect(m.cc).toEqual(["carol@example.com"]);
     expect(m.date?.toISOString()).toBe("2026-08-15T10:00:00.000Z");
     expect(m.text?.trim()).toBe("The plan is on track.");
     expect(m.html).toContain("<b>on track</b>");

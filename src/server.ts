@@ -41,10 +41,11 @@ server.registerTool(
     description:
       "Search messages by metadata, optionally filtering on body text. Metadata filters are near instant. " +
       "A body filter reads message files for the messages that survive the metadata filters, so always " +
-      "combine body with at least one of from, mailboxUrl, subject, or since.",
+      "combine body with at least one of from, recipient, mailboxUrl, subject, or since.",
     inputSchema: {
       mailboxUrl: z.string().optional().describe("Exact mailbox url from list_mailboxes"),
       from: z.string().optional().describe("Substring match on sender address"),
+      recipient: z.string().optional().describe("Substring match on any To, Cc, or Bcc recipient address"),
       subject: z.string().optional().describe("Substring match on subject"),
       body: z.string().optional().describe("Substring match on body text. Requires narrowing filters."),
       since: z.number().optional().describe("Unix seconds, inclusive lower bound on received date"),

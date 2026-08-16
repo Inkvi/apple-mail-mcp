@@ -12,6 +12,8 @@ export { BODY_SCAN_CAP };
 export interface FullMessage extends MessageRow {
   bodyAvailable: boolean;
   partial: boolean;
+  to: string[];
+  cc: string[];
   text: string | null;
   html: string | null;
   attachments: ParsedEmail["attachments"];
@@ -133,7 +135,7 @@ export class Dispatcher implements MailDispatcher {
 
     const file = resolveMessageFile(this.storeRoot, row.mailboxUrl, rowid);
     if (!file) {
-      return { ...patched, bodyAvailable: false, partial: false, text: null, html: null, attachments: [] };
+      return { ...patched, bodyAvailable: false, partial: false, to: [], cc: [], text: null, html: null, attachments: [] };
     }
 
     try {
@@ -142,12 +144,14 @@ export class Dispatcher implements MailDispatcher {
         ...patched,
         bodyAvailable: true,
         partial: file.partial,
+        to: parsed.to,
+        cc: parsed.cc,
         text: parsed.text,
         html: parsed.html,
         attachments: parsed.attachments,
       };
     } catch {
-      return { ...patched, bodyAvailable: false, partial: file.partial, text: null, html: null, attachments: [] };
+      return { ...patched, bodyAvailable: false, partial: file.partial, to: [], cc: [], text: null, html: null, attachments: [] };
     }
   }
 

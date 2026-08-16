@@ -29,6 +29,22 @@ d("Dispatcher read path", () => {
     expect(typeof full?.bodyAvailable).toBe("boolean");
   });
 
+  // Reply-all is impossible unless get_message says who a message went to.
+  test("getMessage surfaces the recipient headers", async () => {
+    const recent = dispatcher.searchMessages({ limit: 20 });
+    let seen: string[] | null = null;
+    for (const r of recent) {
+      const full = await dispatcher.getMessage(r.rowid);
+      expect(Array.isArray(full?.to)).toBe(true);
+      expect(Array.isArray(full?.cc)).toBe(true);
+      if (full?.bodyAvailable && full.to.length > 0) { seen = full.to; break; }
+    }
+    // At least one of the 20 newest messages must name a recipient; a store
+    // where none does would let this test pass without proving anything.
+    expect(seen).not.toBeNull();
+    expect(seen![0]).toContain("@");
+  });
+
   test("a narrowed body search returns only matching messages", async () => {
     const recent = dispatcher.searchMessages({ limit: 200 });
     const seed = recent.find((r) => (r.subject ?? "").length > 6);

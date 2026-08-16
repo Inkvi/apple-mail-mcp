@@ -13,6 +13,7 @@ const REQUIRED: Record<string, string[]> = {
   subjects: ["ROWID", "subject"],
   addresses: ["ROWID", "address"],
   mailboxes: ["ROWID", "url", "total_count", "unread_count"],
+  recipients: ["message", "address"],
   attachments: ["message", "name"],
   message_global_data: ["message_id", "message_id_header"],
 };

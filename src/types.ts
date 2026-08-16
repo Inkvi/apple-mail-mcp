@@ -25,6 +25,7 @@ export interface MailboxRow {
 export interface SearchFilter {
   mailboxUrl?: string;
   from?: string;
+  recipient?: string;
   subject?: string;
   since?: number;
   until?: number;
