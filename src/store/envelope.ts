@@ -47,6 +47,18 @@ function toMessageRow(r: RawRow): MessageRow {
   };
 }
 
+/**
+ * Total clamp for the query limit: every possible input maps to an integer
+ * in [1, 1000]. Non-finite values (NaN, Infinity) and undefined fall back to
+ * the default of 50. SQLite treats LIMIT -1 as unbounded and rejects REAL
+ * bindings, so this must hold for hostile input; SearchFilter is fed straight
+ * from MCP tool input and this module is the safety boundary.
+ */
+export function clampLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return 50;
+  return Math.max(1, Math.min(1000, Math.floor(limit)));
+}
+
 export class EnvelopeStore {
   private db: Database;
 
@@ -90,7 +102,7 @@ export class EnvelopeStore {
     if (f.flaggedOnly)    { where.push("m.flagged = 1"); }
     if (f.hasAttachments) { where.push("exists (select 1 from attachments at2 where at2.message = m.ROWID)"); }
 
-    params.$limit = Math.min(f.limit ?? 50, 1000);
+    params.$limit = clampLimit(f.limit);
 
     const sql = `${SELECT} where ${where.join(" and ")} order by m.date_received desc limit $limit`;
     return (this.db.query(sql).all(params) as RawRow[]).map(toMessageRow);
