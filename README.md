@@ -50,14 +50,16 @@ The server needs two macOS grants:
 1. **Automation for Mail.** The first AppleScript write triggers a prompt
    asking to allow your MCP client (or terminal) to control Mail. This gates
    all write tools.
-2. **Full Disk Access for the `bun` binary.** Mail's store under
-   `~/Library/Mail` is protected, so the process reading it needs Full Disk
-   Access. Be clear about what this means: Full Disk Access is a broad
-   grant. It lets `bun`, and therefore anything you run with `bun`, read
-   protected files across your account, not just Mail. Grant it in System
-   Settings under Privacy & Security, Full Disk Access, by adding the `bun`
-   binary (find it with `which bun`). If you are not comfortable with that
-   trade, do not install this server.
+2. **Full Disk Access for whatever launches the server.** Mail's store under
+   `~/Library/Mail` is protected. macOS grants this per *responsible
+   process*, not per binary, so the grant belongs to the app that spawns the
+   server: Claude Desktop for a Desktop config, your terminal app for the
+   CLI. Granting it to the `bun` binary itself does nothing. Be clear about
+   what this means: Full Disk Access is a broad grant. It lets that app, and
+   everything it launches, read protected files across your account, not
+   just Mail. Grant it in System Settings under Privacy & Security, Full
+   Disk Access. If you are not comfortable with that trade, do not install
+   this server.
 
 ## Install
 
@@ -81,17 +83,23 @@ For Claude Desktop or any client that takes the standard JSON config:
 {
   "mcpServers": {
     "apple-mail": {
-      "command": "bun",
+      "command": "/opt/homebrew/bin/bun",
       "args": ["run", "/absolute/path/to/apple-mail-mcp/src/server.ts"]
     }
   }
 }
 ```
 
+Use the absolute path to `bun` (`which bun`). Claude Desktop launches
+servers with a minimal `PATH` that does not include Homebrew, so a bare
+`"bun"` fails to start. The config file lives at
+`~/Library/Application Support/Claude/claude_desktop_config.json`; restart
+Claude Desktop after editing it.
+
 For Claude Code:
 
 ```bash
-claude mcp add apple-mail -- bun run /absolute/path/to/apple-mail-mcp/src/server.ts
+claude mcp add apple-mail -s user -- /opt/homebrew/bin/bun run /absolute/path/to/apple-mail-mcp/src/server.ts
 ```
 
 ## Tools
