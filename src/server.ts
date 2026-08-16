@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { Dispatcher, DegradedDispatcher, type MailDispatcher } from "./dispatcher";
 import { markRead, setFlagged, moveMessages, deleteMessages, createDraft, updateDraft, deleteDraft } from "./mail/mutations";
+import { composeReply, composeForward } from "./mail/compose";
 import { findStoreRoot } from "./store/paths";
 import { probeStore, type ProbeResult } from "./store/probe";
 
@@ -152,30 +153,33 @@ server.registerTool(
     description:
       "Create a draft email in Apple Mail. The draft is saved to Drafts and opened for review. " +
       "This server cannot send mail; the human presses send. " +
-      "Pass replyToRowid to quote and address an existing message.",
+      "Pass replyToRowid to quote and address an existing message, or forwardOfRowid to forward one. " +
+      "They are mutually exclusive.",
     inputSchema: {
       to: z.array(z.string()).min(1).describe("Recipient email addresses"),
       cc: z.array(z.string()).optional(),
       subject: z.string(),
       body: z.string(),
       replyToRowid: z.number().optional().describe("Message id being replied to, from search_messages"),
+      forwardOfRowid: z.number().optional().describe("Message id being forwarded, from search_messages"),
     },
   },
-  async ({ to, cc, subject, body, replyToRowid }) => {
-    let finalSubject = subject;
-    let finalBody = body;
-
-    if (replyToRowid !== undefined) {
-      const original = await dispatcher.getMessage(replyToRowid);
-      if (!original) throw new Error(`Message ${replyToRowid} not found.`);
-      if (!/^re:/i.test(finalSubject) && original.subject) {
-        finalSubject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
-      }
-      const quoted = (original.text ?? "").split("\n").map((l) => `> ${l}`).join("\n");
-      finalBody = `${body}\n\nOn ${new Date(original.dateReceived * 1000).toLocaleString()}, ${original.sender ?? "someone"} wrote:\n${quoted}`;
+  async ({ to, cc, subject, body, replyToRowid, forwardOfRowid }) => {
+    if (replyToRowid !== undefined && forwardOfRowid !== undefined) {
+      throw new Error("Pass replyToRowid or forwardOfRowid, not both. A draft cannot be both a reply and a forward.");
     }
 
-    await createDraft({ to, cc, subject: finalSubject, body: finalBody });
+    let draft = { subject, body };
+    const sourceRowid = replyToRowid ?? forwardOfRowid;
+    if (sourceRowid !== undefined) {
+      const original = await dispatcher.getMessage(sourceRowid);
+      if (!original) throw new Error(`Message ${sourceRowid} not found.`);
+      draft = replyToRowid !== undefined
+        ? composeReply(original, subject, body)
+        : composeForward(original, subject, body);
+    }
+
+    await createDraft({ to, cc, subject: draft.subject, body: draft.body });
     return { content: [{ type: "text", text: `Draft saved to Drafts and opened in Mail. Review it and send it yourself.` }] };
   },
 );
