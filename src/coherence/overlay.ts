@@ -1,6 +1,10 @@
 import type { MessageRow } from "../types";
 
-export type WritePatch = Partial<Pick<MessageRow, "read" | "flagged" | "mailboxUrl">>;
+// Only read and flagged are overlaid. Moves and deletes deliberately are
+// not: masking their visibility window would need a mailbox-name-to-url
+// lookup, and the measured post-write lag of 0 to 1 ms
+// (docs/measurements/wal-lag.md) makes that window too small to be worth it.
+export type WritePatch = Partial<Pick<MessageRow, "read" | "flagged">>;
 
 interface Entry { patch: WritePatch; at: number }
 
