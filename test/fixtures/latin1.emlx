@@ -1,0 +1,11 @@
+177
+From: alice@example.com
+To: bob@example.com
+Subject: Menu
+Date: Fri, 15 Aug 2026 10:04:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=iso-8859-1
+
+café olé
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>flags</key><integer>0</integer></dict></plist>

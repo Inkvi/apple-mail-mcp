@@ -1,0 +1,13 @@
+258
+From: alice@example.com
+To: bob@example.com
+Subject: Invoice
+Date: Fri, 15 Aug 2026 10:02:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Total =3D 42 and this line is soft-=
+wrapped.
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>flags</key><integer>0</integer></dict></plist>

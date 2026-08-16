@@ -1,0 +1,19 @@
+404
+From: Alice Example <alice@example.com>
+To: Bob Example <bob@example.com>
+Subject: Quarterly plan
+Date: Fri, 15 Aug 2026 10:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+The plan is on track.
+--b1
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>The plan is <b>on track</b>.</p></body></html>
+--b1--
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>flags</key><integer>0</integer></dict></plist>

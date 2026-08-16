@@ -1,0 +1,13 @@
+258
+From: alice@example.com
+To: bob@example.com
+Subject: Big message
+Date: Fri, 15 Aug 2026 10:05:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b2"
+
+--b2
+Content-Type: text/plain; charset=utf-8
+
+The download stopped right about he<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>flags</key><integer>0</integer></dict></plist>

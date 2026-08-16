@@ -1,0 +1,12 @@
+254
+From: alice@example.com
+To: bob@example.com
+Subject: Attachment note
+Date: Fri, 15 Aug 2026 10:03:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: base64
+
+TnVtYmVycyBzcGVhayBsb3VkZXIgdGhhbiB3b3Jkcy4=
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>flags</key><integer>0</integer></dict></plist>
