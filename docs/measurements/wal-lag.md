@@ -11,11 +11,14 @@ space measured it.
 - Machine: Mac mini, Apple M4 Pro, 64 GB
 - macOS: 26.6.1 (build 25G76)
 - Bun: 1.3.14, `bun:sqlite` with `{ readonly: true }` (never `immutable=1`)
-- Script: `scripts/measure-wal-lag.ts`
-- Target: one controller-selected marketing spam message, rowid 209947, in
-  `[Gmail]/Spam` of account `44444444-5555-4000-8000-666666666666`. The only
-  mutation was toggling its `flagged status` via Mail.app, five times, then
-  restoring the original `flagged=false`.
+- Script: `scripts/measure-wal-lag.ts <account-uuid> "[Gmail]/Spam" 209947`
+- Target: one marketing spam message, rowid 209947, in `[Gmail]/Spam`. The
+  only mutation was toggling its `flagged status` via Mail.app, five times,
+  then restoring the original `flagged=false`.
+
+The account UUID has been redacted from this record as `<account-uuid>`. It
+identified a mailbox on the machine described above and is not needed to read
+the result.
 
 Per iteration the script toggled the flag through `osascript`, then polled
 two readers every 10ms until each observed the new value:
@@ -27,7 +30,7 @@ two readers every 10ms until each observed the new value:
 ## Raw output
 
 ```
-Target: rowid=209947 in [Gmail]/Spam of account 44444444-5555-4000-8000-666666666666
+Target: rowid=209947 in [Gmail]/Spam of account <account-uuid>
 Original state: flagged=false read=false
 Subject: You’re Paying for AI… Then Losing the Work
 

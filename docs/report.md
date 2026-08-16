@@ -160,10 +160,9 @@ diff was reviewed after. Five defects were caught that would have shipped:
 2. **Heavier mutations are unmeasured.** Write visibility was measured on a
    flag toggle against an idle Mail.app. Moves and deletes on a busy Mail may
    commit later. The 2000 ms TTL has room, but the data does not cover them.
-3. **Account UUIDs and one spam subject line appear in the docs and tests.**
-   They are local identifiers and marketing spam, not credentials or personal
-   correspondence, but they are a reason to think before making this
-   repository public.
+3. **Live write tests remain the blocker for a public release.** Publishing a
+   tool that moves and deletes mail, with no test that has ever executed a
+   mutation, puts the error -609 class of defect in front of strangers.
 
 ## Installation note
 

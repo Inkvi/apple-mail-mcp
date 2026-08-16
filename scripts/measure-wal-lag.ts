@@ -15,12 +15,25 @@ import { runAppleScript } from "../src/mail/applescript";
 import { EnvelopeStore } from "../src/store/envelope";
 import { findStoreRoot } from "../src/store/paths";
 
-// Controller-selected target. Do NOT change these values. The message is
-// marketing spam in [Gmail]/Spam, verified safe to toggle. The full path
-// form "[Gmail]/Spam" is required; the leaf name "Spam" does not resolve.
-const ACCOUNT_ID = "44444444-5555-4000-8000-666666666666";
-const MAILBOX_PATH = "[Gmail]/Spam";
-const MESSAGE_ID = 209947;
+// Target is supplied on the command line, because it is specific to whoever
+// runs this. Pick a message you are happy to flag and unflag five times: the
+// script toggles it and restores the original value.
+//
+// Give the mailbox as its full path. For nested Gmail mailboxes the full form
+// "[Gmail]/Spam" is required; the leaf name "Spam" does not resolve.
+const [ACCOUNT_ID, MAILBOX_PATH, MESSAGE_ID_ARG] = process.argv.slice(2);
+if (!ACCOUNT_ID || !MAILBOX_PATH || !MESSAGE_ID_ARG) {
+  console.error(
+    'usage: bun run scripts/measure-wal-lag.ts <account-uuid> <mailbox-path> <rowid>\n' +
+      'example: bun run scripts/measure-wal-lag.ts 11111111-2222-4000-8000-333333333333 "[Gmail]/Spam" 209947',
+  );
+  process.exit(2);
+}
+const MESSAGE_ID = Number(MESSAGE_ID_ARG);
+if (!Number.isInteger(MESSAGE_ID) || MESSAGE_ID <= 0) {
+  console.error(`rowid must be a positive integer, got: ${MESSAGE_ID_ARG}`);
+  process.exit(2);
+}
 const EXPECTED_MAILBOX_URL = `imap://${ACCOUNT_ID}/%5BGmail%5D/Spam`;
 
 const ITERATIONS = 5;
