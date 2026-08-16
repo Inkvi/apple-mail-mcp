@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { Dispatcher } from "./dispatcher";
+import { markRead, setFlagged, moveMessages, deleteMessages } from "./mail/mutations";
 import { findStoreRoot } from "./store/paths";
 import { probeStore } from "./store/probe";
 
@@ -94,6 +95,44 @@ server.registerTool(
     const a = await dispatcher.getAttachment(rowid, filename);
     return { content: [{ type: "text", text: a ? JSON.stringify(a) : "Attachment not found." }] };
   },
+);
+
+server.registerTool(
+  "update_messages",
+  {
+    description:
+      "Mark messages read or unread, flag or unflag them, or move them to another mailbox. " +
+      "Operates on a batch of message ids from search_messages. All three operations are reversible.",
+    inputSchema: {
+      rowids: z.array(z.number()).min(1).describe("Message ids from search_messages"),
+      read: z.boolean().optional().describe("Set read status"),
+      flagged: z.boolean().optional().describe("Set flagged status"),
+      moveTo: z.string().optional().describe("Destination mailbox name, requires account"),
+      account: z.string().optional().describe("Account name for moveTo"),
+    },
+  },
+  async ({ rowids, read, flagged, moveTo, account }) => {
+    const done: string[] = [];
+    if (read !== undefined)    done.push(`read=${read} on ${await markRead(rowids, read)} messages`);
+    if (flagged !== undefined) done.push(`flagged=${flagged} on ${await setFlagged(rowids, flagged)} messages`);
+    if (moveTo) {
+      if (!account) throw new Error("moveTo requires account");
+      done.push(`moved ${await moveMessages(rowids, moveTo, account)} messages to ${moveTo}`);
+    }
+    if (done.length === 0) throw new Error("Nothing to do. Pass at least one of read, flagged, or moveTo.");
+    return { content: [{ type: "text", text: done.join("; ") }] };
+  },
+);
+
+server.registerTool(
+  "delete_messages",
+  {
+    description: "Move messages to Trash. This is reversible from Trash and never erases mail permanently.",
+    inputSchema: { rowids: z.array(z.number()).min(1) },
+  },
+  async ({ rowids }) => ({
+    content: [{ type: "text", text: `Moved ${await deleteMessages(rowids)} messages to Trash.` }],
+  }),
 );
 
 await server.connect(new StdioServerTransport());
