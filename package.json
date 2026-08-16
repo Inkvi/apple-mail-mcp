@@ -1,0 +1,22 @@
+{
+  "name": "apple-mail-mcp",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "start": "bun run src/server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/mailparser": "^3.4.6"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "mailparser": "^3.9.15",
+    "zod": "^4.4.3"
+  }
+}
