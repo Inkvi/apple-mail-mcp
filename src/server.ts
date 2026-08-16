@@ -91,7 +91,9 @@ server.registerTool(
 server.registerTool(
   "get_attachment",
   {
-    description: "Get one attachment's content, base64 encoded.",
+    description:
+      "Get one attachment's content, base64 encoded. Attachments over 10 MB are refused " +
+      "with their actual size rather than truncated.",
     inputSchema: { rowid: z.number(), filename: z.string() },
   },
   async ({ rowid, filename }) => {

@@ -3,11 +3,11 @@ import { simpleParser } from "mailparser";
 import { clampLimit, EnvelopeStore } from "./store/envelope";
 import { resolveMessageFile } from "./store/paths";
 import { parseEmlxFile, unwrapEmlx, type ParsedEmail } from "./store/emlx";
-import { BODY_SCAN_CAP } from "./limits";
+import { ATTACHMENT_MAX_BYTES, BODY_SCAN_CAP } from "./limits";
 import { WriteOverlay, type WritePatch } from "./coherence/overlay";
 import type { MailboxRow, MessageRow, SearchFilter } from "./types";
 
-export { BODY_SCAN_CAP };
+export { ATTACHMENT_MAX_BYTES, BODY_SCAN_CAP };
 
 export interface FullMessage extends MessageRow {
   bodyAvailable: boolean;
@@ -167,7 +167,8 @@ export class Dispatcher implements MailDispatcher {
     for (const id of rowids) this.overlay.record(id, patch);
   }
 
-  async getAttachment(rowid: number, filename: string): Promise<AttachmentContent | null> {
+  /** maxBytes is a test seam; production callers take the default cap. */
+  async getAttachment(rowid: number, filename: string, maxBytes = ATTACHMENT_MAX_BYTES): Promise<AttachmentContent | null> {
     const row = this.store.getMessage(rowid);
     if (!row) return null;
     const file = resolveMessageFile(this.storeRoot, row.mailboxUrl, rowid);
@@ -176,6 +177,13 @@ export class Dispatcher implements MailDispatcher {
     const parsed = await simpleParser(unwrapEmlx(await readFile(file.path)));
     const found = parsed.attachments.find((a) => a.filename === filename);
     if (!found) return null;
+
+    if (found.content.length > maxBytes) {
+      throw new Error(
+        `Attachment "${found.filename ?? filename}" is ${found.content.length} bytes, ` +
+          `over the ${maxBytes} byte cap. It was not returned; open it in Mail instead.`,
+      );
+    }
 
     return {
       filename: found.filename ?? filename,

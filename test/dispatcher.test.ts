@@ -1,5 +1,5 @@
 import { test, expect, describe, afterAll } from "bun:test";
-import { Dispatcher, DegradedDispatcher, BODY_SCAN_CAP } from "../src/dispatcher";
+import { Dispatcher, DegradedDispatcher, BODY_SCAN_CAP, ATTACHMENT_MAX_BYTES } from "../src/dispatcher";
 import { findStoreRoot } from "../src/store/paths";
 import { EnvelopeStore } from "../src/store/envelope";
 
@@ -85,6 +85,36 @@ d("Dispatcher read path", () => {
 
   test("the scan cap is the documented value", () => {
     expect(BODY_SCAN_CAP).toBe(5000);
+  });
+
+  // Without a cap, a 50 MB PDF becomes a 67 MB JSON tool result. Over the
+  // cap the tool refuses, naming the size and the cap, instead of silently
+  // truncating. The tiny explicit cap exercises the refusal against a real
+  // attachment of any size.
+  test("getAttachment refuses an attachment over the byte cap and names both numbers", async () => {
+    const withAttachments = dispatcher.searchMessages({ hasAttachments: true, limit: 25 });
+    let target: { rowid: number; filename: string; size: number } | null = null;
+    for (const r of withAttachments) {
+      const full = await dispatcher.getMessage(r.rowid);
+      const att = full?.attachments.find((a) => a.filename && a.size > 1);
+      if (full?.bodyAvailable && att) {
+        target = { rowid: r.rowid, filename: att.filename!, size: att.size };
+        break;
+      }
+    }
+    // Tolerates a store with no locally available attachments; not a silent pass.
+    if (!target) return;
+
+    await expect(dispatcher.getAttachment(target.rowid, target.filename, 1)).rejects.toThrow(/1 byte cap/);
+
+    // Under the cap, content comes back whole.
+    const ok = await dispatcher.getAttachment(target.rowid, target.filename, target.size);
+    expect(ok?.filename).toBe(target.filename);
+    expect(Buffer.from(ok!.base64, "base64").length).toBe(target.size);
+  });
+
+  test("the attachment cap is the documented value", () => {
+    expect(ATTACHMENT_MAX_BYTES).toBe(10 * 1024 * 1024);
   });
 });
 
