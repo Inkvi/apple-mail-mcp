@@ -1,5 +1,5 @@
 import { test, expect, describe, afterAll } from "bun:test";
-import { Dispatcher, BODY_SCAN_CAP } from "../src/dispatcher";
+import { Dispatcher, DegradedDispatcher, BODY_SCAN_CAP } from "../src/dispatcher";
 import { findStoreRoot } from "../src/store/paths";
 import { EnvelopeStore } from "../src/store/envelope";
 
@@ -69,5 +69,27 @@ d("Dispatcher read path", () => {
 
   test("the scan cap is the documented value", () => {
     expect(BODY_SCAN_CAP).toBe(5000);
+  });
+});
+
+// When the startup probe rejects the store, the server must not exit: the
+// AppleScript write path is exactly the half that still works. Read tools
+// surface the probe's reason; write-side hooks stay inert but callable.
+describe("DegradedDispatcher", () => {
+  const reason = "table messages is missing columns: date_received";
+  const deg = new DegradedDispatcher(reason);
+
+  test("every read method surfaces the probe reason", async () => {
+    expect(() => deg.listMailboxes()).toThrow(reason);
+    expect(() => deg.searchMessages({})).toThrow(reason);
+    expect(() => deg.getThread(1)).toThrow(reason);
+    await expect(deg.searchMessagesWithBody({ body: "x" })).rejects.toThrow(reason);
+    await expect(deg.getMessage(1)).rejects.toThrow(reason);
+    await expect(deg.getAttachment(1, "a.pdf")).rejects.toThrow(reason);
+  });
+
+  test("write-side hooks keep working so write tools stay usable", () => {
+    expect(() => deg.recordWrite([1, 2], { read: true })).not.toThrow();
+    expect(() => deg.close()).not.toThrow();
   });
 });

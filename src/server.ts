@@ -1,27 +1,29 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { Dispatcher } from "./dispatcher";
+import { Dispatcher, DegradedDispatcher, type MailDispatcher } from "./dispatcher";
 import { markRead, setFlagged, moveMessages, deleteMessages, createDraft, updateDraft, deleteDraft } from "./mail/mutations";
 import { findStoreRoot } from "./store/paths";
-import { probeStore } from "./store/probe";
+import { probeStore, type ProbeResult } from "./store/probe";
 
+// A failed probe degrades the server instead of killing it: the AppleScript
+// write path never touches the store, so write tools keep working while read
+// tools return the probe's reason.
 const storeRoot = findStoreRoot();
-if (!storeRoot) {
-  console.error("No Apple Mail store found under ~/Library/Mail. Launch Mail at least once.");
-  process.exit(1);
-}
+const probe: ProbeResult = storeRoot
+  ? probeStore(storeRoot)
+  : { ok: false, reason: "no Apple Mail store found under ~/Library/Mail; launch Mail at least once" };
 
-const probe = probeStore(storeRoot);
-if (!probe.ok) {
+let dispatcher: MailDispatcher;
+if (probe.ok) {
+  console.error(`Apple Mail store ${probe.storeVersion}, ${probe.messageCount} messages.`);
+  dispatcher = new Dispatcher(storeRoot!);
+} else {
   console.error(`Unsupported Apple Mail store: ${probe.reason}`);
-  console.error("Read tools are unavailable. This usually means macOS changed the store format,");
-  console.error("or the runtime lacks Full Disk Access.");
-  process.exit(1);
+  console.error("Read tools will return this error. This usually means macOS changed the store");
+  console.error("format, or the runtime lacks Full Disk Access. Write tools keep working.");
+  dispatcher = new DegradedDispatcher(probe.reason);
 }
-console.error(`Apple Mail store ${probe.storeVersion}, ${probe.messageCount} messages.`);
-
-const dispatcher = new Dispatcher(storeRoot);
 const server = new McpServer({ name: "apple-mail", version: "0.1.0" });
 
 server.registerTool(

@@ -17,7 +17,52 @@ export interface FullMessage extends MessageRow {
   attachments: ParsedEmail["attachments"];
 }
 
-export class Dispatcher {
+export interface AttachmentContent {
+  filename: string;
+  contentType: string;
+  base64: string;
+}
+
+/** What server.ts needs from a dispatcher, healthy or degraded. */
+export interface MailDispatcher {
+  listMailboxes(): MailboxRow[];
+  searchMessages(f: SearchFilter): MessageRow[];
+  searchMessagesWithBody(f: SearchFilter & { body: string }): Promise<MessageRow[]>;
+  getMessage(rowid: number): Promise<FullMessage | null>;
+  getThread(rowid: number): MessageRow[];
+  getAttachment(rowid: number, filename: string): Promise<AttachmentContent | null>;
+  recordWrite(rowids: number[], patch: WritePatch): void;
+  close(): void;
+}
+
+/**
+ * Stands in for Dispatcher when the startup probe rejects the store. Read
+ * tools surface the probe's reason instead of returning wrong data. Write
+ * tools go through Mail.app, never through the store, so they keep working;
+ * recordWrite is a no-op because with no read path there is nothing for the
+ * overlay to smooth.
+ */
+export class DegradedDispatcher implements MailDispatcher {
+  constructor(private reason: string) {}
+
+  private refuse(): never {
+    throw new Error(
+      `Read tools are unavailable: ${this.reason}. ` +
+        "Write tools still work because they go through Mail.app, not the store.",
+    );
+  }
+
+  listMailboxes(): MailboxRow[] { return this.refuse(); }
+  searchMessages(_f: SearchFilter): MessageRow[] { return this.refuse(); }
+  async searchMessagesWithBody(_f: SearchFilter & { body: string }): Promise<MessageRow[]> { return this.refuse(); }
+  async getMessage(_rowid: number): Promise<FullMessage | null> { return this.refuse(); }
+  getThread(_rowid: number): MessageRow[] { return this.refuse(); }
+  async getAttachment(_rowid: number, _filename: string): Promise<AttachmentContent | null> { return this.refuse(); }
+  recordWrite(_rowids: number[], _patch: WritePatch): void {}
+  close(): void {}
+}
+
+export class Dispatcher implements MailDispatcher {
   private store: EnvelopeStore;
   readonly overlay: WriteOverlay;
 
@@ -118,7 +163,7 @@ export class Dispatcher {
     for (const id of rowids) this.overlay.record(id, patch);
   }
 
-  async getAttachment(rowid: number, filename: string): Promise<{ filename: string; contentType: string; base64: string } | null> {
+  async getAttachment(rowid: number, filename: string): Promise<AttachmentContent | null> {
     const row = this.store.getMessage(rowid);
     if (!row) return null;
     const file = resolveMessageFile(this.storeRoot, row.mailboxUrl, rowid);
