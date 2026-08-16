@@ -54,9 +54,9 @@ function toMessageRow(r: RawRow): MessageRow {
  * bindings, so this must hold for hostile input; SearchFilter is fed straight
  * from MCP tool input and this module is the safety boundary.
  */
-export function clampLimit(limit: number | undefined): number {
+export function clampLimit(limit: number | undefined, max = 1000): number {
   if (limit === undefined || !Number.isFinite(limit)) return 50;
-  return Math.max(1, Math.min(1000, Math.floor(limit)));
+  return Math.max(1, Math.min(max, Math.floor(limit)));
 }
 
 export class EnvelopeStore {
@@ -89,7 +89,12 @@ export class EnvelopeStore {
     });
   }
 
-  searchMessages(f: SearchFilter): MessageRow[] {
+  /**
+   * limitOverride is for trusted internal callers only, such as the
+   * dispatcher's body scan, which needs a candidate pool larger than the
+   * MCP-facing cap of 1000. MCP tool input must never reach it.
+   */
+  searchMessages(f: SearchFilter, limitOverride?: number): MessageRow[] {
     const where: string[] = ["m.deleted = 0"];
     const params: Record<string, string | number> = {};
 
@@ -102,7 +107,7 @@ export class EnvelopeStore {
     if (f.flaggedOnly)    { where.push("m.flagged = 1"); }
     if (f.hasAttachments) { where.push("exists (select 1 from attachments at2 where at2.message = m.ROWID)"); }
 
-    params.$limit = clampLimit(f.limit);
+    params.$limit = limitOverride ?? clampLimit(f.limit);
 
     const sql = `${SELECT} where ${where.join(" and ")} order by m.date_received desc limit $limit`;
     return (this.db.query(sql).all(params) as RawRow[]).map(toMessageRow);
