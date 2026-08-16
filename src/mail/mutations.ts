@@ -85,34 +85,94 @@ export interface DraftSpec {
 }
 
 /**
- * Creates a draft and leaves it visible in Mail. There is no send path here
- * by design: the human presses send.
- *
  * Body newlines are preserved by joining AppleScript string literals with
- * `return`, since escapeAppleScript flattens newlines for safety.
+ * `return`, since escapeAppleScript flattens newlines for safety. An empty
+ * body splits to [""], so this always yields a valid string expression.
  */
-export function buildDraftScript(d: DraftSpec): string {
-  if (d.to.length === 0) throw new Error("a draft needs at least one recipient");
-
-  const bodyLiteral = d.body
+function draftContentLiteral(body: string): string {
+  return body
     .split(/\r\n|\r|\n/)
     .map((line) => `"${escapeAppleScript(line)}"`)
     .join(" & return & ");
+}
 
-  const recipients = [
+function draftRecipientLines(d: DraftSpec): string {
+  if (d.to.length === 0) throw new Error("a draft needs at least one recipient");
+  return [
     ...d.to.map((a) => `make new to recipient at end of to recipients with properties {address:"${escapeAppleScript(a)}"}`),
     ...(d.cc ?? []).map((a) => `make new cc recipient at end of cc recipients with properties {address:"${escapeAppleScript(a)}"}`),
   ].join("\n        ");
+}
 
-  return `
-    tell application "Mail"
-      set newMessage to make new outgoing message with properties {subject:"${escapeAppleScript(d.subject)}", content:${bodyLiteral}, visible:true}
+/** The statements that create and save one visible draft. Never a send. */
+function makeDraftStatements(d: DraftSpec): string {
+  const recipients = draftRecipientLines(d);
+  return `set newMessage to make new outgoing message with properties {subject:"${escapeAppleScript(d.subject)}", content:${draftContentLiteral(d.body)}, visible:true}
       tell newMessage
         ${recipients}
       end tell
-      save newMessage
+      save newMessage`;
+}
+
+/**
+ * Creates a draft and leaves it visible in Mail. There is no send path here
+ * by design: the human presses send.
+ */
+export function buildDraftScript(d: DraftSpec): string {
+  return `
+    tell application "Mail"
+      ${makeDraftStatements(d)}
       return "draft created"
     end tell`;
 }
 
+function draftRowid(rowid: number): number {
+  if (!Number.isInteger(rowid)) throw new Error(`draft id must be an integer, got ${rowid}`);
+  return rowid;
+}
+
+/**
+ * Drafts are removed with the `delete` command, never by setting
+ * `deleted status` the way buildDeleteScript does for ordinary mail: on a
+ * saved draft, `set deleted status to true` fails with error -609
+ * (connection invalid) while `delete` moves it to Trash. Observed live on
+ * this machine, 2026-08-15. Do not unify this with the message path.
+ *
+ * Only the Drafts mailbox is searched, so this can never touch ordinary
+ * mail.
+ */
+export function buildDeleteDraftScript(rowid: number): string {
+  return `
+    tell application "Mail"
+      set hits to (every message of drafts mailbox whose id is ${draftRowid(rowid)})
+      repeat with m in hits
+        delete m
+      end repeat
+      return (count of hits)
+    end tell`;
+}
+
+/**
+ * Mail forbids editing a saved draft in place, so updating is delete and
+ * recreate, in one script. Order matters: the guard runs first so a missing
+ * draft creates nothing, and the replacement is created and saved before the
+ * old draft is deleted, so a failure partway through can never lose the
+ * draft. The replacement gets a new id.
+ */
+export function buildUpdateDraftScript(rowid: number, d: DraftSpec): string {
+  const id = draftRowid(rowid);
+  return `
+    tell application "Mail"
+      set oldDrafts to (every message of drafts mailbox whose id is ${id})
+      if (count of oldDrafts) is 0 then return 0
+      ${makeDraftStatements(d)}
+      repeat with m in oldDrafts
+        delete m
+      end repeat
+      return (count of oldDrafts)
+    end tell`;
+}
+
 export const createDraft = (d: DraftSpec) => runAppleScript(buildDraftScript(d));
+export const updateDraft = (rowid: number, d: DraftSpec) => count(buildUpdateDraftScript(rowid, d));
+export const deleteDraft = (rowid: number) => count(buildDeleteDraftScript(rowid));

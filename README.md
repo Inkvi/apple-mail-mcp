@@ -109,10 +109,12 @@ Messages are identified by one id everywhere: `rowid`, as returned by
 | `update_messages` | Mark read or unread, flag or unflag, move to another mailbox, in batch |
 | `delete_messages` | Move messages to Trash |
 | `create_draft` | Create a draft, optionally quoting a message being replied to. Saved to Drafts and opened; never sent |
+| `update_draft` | Replace a draft with a new version. Mail forbids editing a saved draft in place, so the old draft moves to Trash and a new one is created with a new id |
+| `delete_draft` | Move a draft to Trash. Only searches the Drafts mailbox |
 
 Every write is reversible: read and flag states toggle back, moves can be
-moved back, and delete means moving to Trash, never erasing. Nothing in this
-server can permanently destroy or send mail.
+moved back, and every delete means moving to Trash, never erasing. Nothing
+in this server can permanently destroy or send mail.
 
 ## Known limitation: body search is capped
 

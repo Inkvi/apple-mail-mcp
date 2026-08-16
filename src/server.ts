@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { Dispatcher } from "./dispatcher";
-import { markRead, setFlagged, moveMessages, deleteMessages, createDraft } from "./mail/mutations";
+import { markRead, setFlagged, moveMessages, deleteMessages, createDraft, updateDraft, deleteDraft } from "./mail/mutations";
 import { findStoreRoot } from "./store/paths";
 import { probeStore } from "./store/probe";
 
@@ -172,6 +172,52 @@ server.registerTool(
 
     await createDraft({ to, cc, subject: finalSubject, body: finalBody });
     return { content: [{ type: "text", text: `Draft saved to Drafts and opened in Mail. Review it and send it yourself.` }] };
+  },
+);
+
+server.registerTool(
+  "update_draft",
+  {
+    description:
+      "Update a draft by replacing it: Mail forbids editing a saved draft in place, so the old draft " +
+      "is moved to Trash and a new draft is created. The draft's id therefore changes; find the " +
+      "replacement via search_messages. Omit subject to keep the original draft's subject, which keeps " +
+      "a reply threaded by subject. This server cannot send mail; the human presses send.",
+    inputSchema: {
+      rowid: z.number().describe("Draft id from search_messages"),
+      to: z.array(z.string()).min(1).describe("Recipient email addresses for the replacement"),
+      cc: z.array(z.string()).optional(),
+      subject: z.string().optional().describe("Omit to keep the original draft's subject"),
+      body: z.string().describe("Full body of the replacement draft"),
+    },
+  },
+  async ({ rowid, to, cc, subject, body }) => {
+    const original = await dispatcher.getMessage(rowid);
+    if (!original) throw new Error(`Message ${rowid} not found.`);
+    const replaced = await updateDraft(rowid, { to, cc, subject: subject ?? original.subject ?? "", body });
+    if (replaced === 0) throw new Error(`Message ${rowid} is not in Drafts. Nothing was created or deleted.`);
+    return {
+      content: [{
+        type: "text",
+        text: "Draft replaced: the old draft moved to Trash and the new draft was saved to Drafts and opened. " +
+          "Its id changed. Review it and send it yourself.",
+      }],
+    };
+  },
+);
+
+server.registerTool(
+  "delete_draft",
+  {
+    description:
+      "Move a draft to Trash. Only searches the Drafts mailbox, so it cannot touch ordinary mail. " +
+      "Reversible from Trash.",
+    inputSchema: { rowid: z.number().describe("Draft id from search_messages") },
+  },
+  async ({ rowid }) => {
+    const n = await deleteDraft(rowid);
+    if (n === 0) throw new Error(`No draft with id ${rowid} found in Drafts.`);
+    return { content: [{ type: "text", text: `Moved draft ${rowid} to Trash.` }] };
   },
 );
 
