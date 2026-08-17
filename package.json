@@ -1,5 +1,8 @@
 {
   "name": "apple-mail-mcp",
+  "description": "MCP server for Apple Mail: SQLite Envelope Index and .emlx for fast reads, AppleScript for mutations. No send capability.",
+  "license": "MIT",
+  "repository": "github:Inkvi/apple-mail-mcp",
   "type": "module",
   "private": true,
   "scripts": {
